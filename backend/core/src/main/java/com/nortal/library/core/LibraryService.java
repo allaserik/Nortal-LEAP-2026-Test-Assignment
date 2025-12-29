@@ -29,10 +29,28 @@ public class LibraryService {
     if (!memberRepository.existsById(memberId)) {
       return Result.failure("MEMBER_NOT_FOUND");
     }
+
+    Book entity = book.get();
+
+    // Prevent double borrowing
+    if (entity.getLoanedTo() != null) {
+      return Result.failure("ALREADY_LOANED");
+    }
+
+    // Respect reservation queue: only head may borrow
+    if (!entity.getReservationQueue().isEmpty()) {
+      String head = entity.getReservationQueue().get(0);
+      if (!memberId.equals(head)) {
+        return Result.failure("RESERVATION_QUEUE");
+      }
+      // borrower is head -> remove them from queue
+      entity.getReservationQueue().remove(0);
+    }
+
     if (!canMemberBorrow(memberId)) {
       return Result.failure("BORROW_LIMIT");
     }
-    Book entity = book.get();
+
     entity.setLoanedTo(memberId);
     entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
     bookRepository.save(entity);
@@ -46,10 +64,38 @@ public class LibraryService {
     }
 
     Book entity = book.get();
+
+    // Returns should only succeed when initiated with the current borrower
+    if (entity.getLoanedTo() == null) {
+      return ResultWithNext.failure();
+    }
+    if (!memberId.equals(entity.getLoanedTo())) {
+      return ResultWithNext.failure();
+    }
+
+    // Clear current borrowing information
     entity.setLoanedTo(null);
     entity.setDueDate(null);
-    String nextMember =
-        entity.getReservationQueue().isEmpty() ? null : entity.getReservationQueue().get(0);
+
+    String nextMember = null;
+
+    // Hand off to next eligible reserver in order.
+    // Skip missing/ineligible members and keep queue consistent by removing
+    // skipped entries.
+    while (!entity.getReservationQueue().isEmpty()) {
+      String candidate = entity.getReservationQueue().get(0);
+      entity.getReservationQueue().remove(0);
+
+      if (!canMemberBorrow(candidate)) {
+        continue;
+      }
+
+      entity.setLoanedTo(candidate);
+      entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
+      nextMember = candidate;
+      break;
+    }
+
     bookRepository.save(entity);
     return ResultWithNext.success(nextMember);
   }
@@ -64,6 +110,36 @@ public class LibraryService {
     }
 
     Book entity = book.get();
+
+    // Prevent double reservation
+    if (entity.getReservationQueue().contains(memberId)) {
+      return Result.failure("ALREADY_RESERVED");
+    }
+
+    // If the book is available but there is an existing queue, do not allow
+    // line-jumping.
+    // Queue head should receive the book via borrow/return handoff;
+    // reservations append.
+    // This should not happen via normal use, but enforce consistency.
+    if (entity.getLoanedTo() == null && !entity.getReservationQueue().isEmpty()) {
+      entity.getReservationQueue().add(memberId);
+      bookRepository.save(entity);
+      return Result.success();
+    }
+
+    // Reserving an available book should immediately borrow it (if eligible)
+    if (entity.getLoanedTo() == null) {
+      if (!canMemberBorrow(memberId)) {
+        return Result.failure("BORROW_LIMIT");
+      }
+      entity.setLoanedTo(memberId);
+      entity.setDueDate(LocalDate.now().plusDays(DEFAULT_LOAN_DAYS));
+      // Do not add to queue when immediate loan happens
+      bookRepository.save(entity);
+      return Result.success();
+    }
+
+    // Book is loaned -> add to reservation queue
     entity.getReservationQueue().add(memberId);
     bookRepository.save(entity);
     return Result.success();
@@ -91,13 +167,8 @@ public class LibraryService {
     if (!memberRepository.existsById(memberId)) {
       return false;
     }
-    int active = 0;
-    for (Book book : bookRepository.findAll()) {
-      if (memberId.equals(book.getLoanedTo())) {
-        active++;
-      }
-    }
-    return active < MAX_LOANS;
+
+    return bookRepository.countByLoanedTo(memberId) < MAX_LOANS;
   }
 
   public List<Book> searchBooks(String titleContains, Boolean availableOnly, String loanedTo) {

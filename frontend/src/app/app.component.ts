@@ -87,10 +87,12 @@ export class AppComponent {
   }
 
   async returnBook(): Promise<void> {
-    if (!this.selectedBookId) {
+    // Check only for bookId, memberId is optional for return
+    if (!this.selectedBookId || !this.selectedMemberId) {
       return;
     }
-    await this.runAction(() => this.api.returnBook(this.selectedBookId!));
+    // Send the memberId to the API
+    await this.runAction(() => this.api.returnBook(this.selectedBookId!, this.selectedMemberId!));
   }
 
   async createBook(): Promise<void> {

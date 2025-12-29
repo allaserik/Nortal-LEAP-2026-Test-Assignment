@@ -110,6 +110,13 @@ class LibraryServiceRulesTest {
         public boolean existsById(String id) {
             return store.containsKey(id);
         }
+
+        @Override
+        public long countByLoanedTo(String memberId) {
+            return store.values().stream()
+                    .filter(book -> memberId.equals(book.getLoanedTo()))
+                    .count();
+        }
     }
 
     static class InMemoryMemberRepository implements MemberRepository {

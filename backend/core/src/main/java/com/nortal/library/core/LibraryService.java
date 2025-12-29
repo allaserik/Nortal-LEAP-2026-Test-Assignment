@@ -86,9 +86,6 @@ public class LibraryService {
       String candidate = entity.getReservationQueue().get(0);
       entity.getReservationQueue().remove(0);
 
-      if (!memberRepository.existsById(candidate)) {
-        continue;
-      }
       if (!canMemberBorrow(candidate)) {
         continue;
       }
@@ -117,6 +114,17 @@ public class LibraryService {
     // Prevent double reservation
     if (entity.getReservationQueue().contains(memberId)) {
       return Result.failure("ALREADY_RESERVED");
+    }
+
+    // If the book is available but there is an existing queue, do not allow
+    // line-jumping.
+    // Queue head should receive the book via borrow/return handoff;
+    // reservations append.
+    // This should not happen via normal use, but enforce consistency.
+    if (entity.getLoanedTo() == null && !entity.getReservationQueue().isEmpty()) {
+      entity.getReservationQueue().add(memberId);
+      bookRepository.save(entity);
+      return Result.success();
     }
 
     // Reserving an available book should immediately borrow it (if eligible)
@@ -166,12 +174,14 @@ public class LibraryService {
   public List<Book> searchBooks(String titleContains, Boolean availableOnly, String loanedTo) {
     return bookRepository.findAll().stream()
         .filter(
-            b -> titleContains == null
-                || b.getTitle().toLowerCase().contains(titleContains.toLowerCase()))
+            b ->
+                titleContains == null
+                    || b.getTitle().toLowerCase().contains(titleContains.toLowerCase()))
         .filter(b -> loanedTo == null || loanedTo.equals(b.getLoanedTo()))
         .filter(
-            b -> availableOnly == null
-                || (availableOnly ? b.getLoanedTo() == null : b.getLoanedTo() != null))
+            b ->
+                availableOnly == null
+                    || (availableOnly ? b.getLoanedTo() == null : b.getLoanedTo() != null))
         .toList();
   }
 
@@ -194,9 +204,10 @@ public class LibraryService {
     if (entity.getLoanedTo() == null) {
       return Result.failure("NOT_LOANED");
     }
-    LocalDate baseDate = entity.getDueDate() == null
-        ? LocalDate.now().plusDays(DEFAULT_LOAN_DAYS)
-        : entity.getDueDate();
+    LocalDate baseDate =
+        entity.getDueDate() == null
+            ? LocalDate.now().plusDays(DEFAULT_LOAN_DAYS)
+            : entity.getDueDate();
     entity.setDueDate(baseDate.plusDays(days));
     bookRepository.save(entity);
     return Result.success();
@@ -317,9 +328,7 @@ public class LibraryService {
   }
 
   public record MemberSummary(
-      boolean ok, String reason, List<Book> loans, List<ReservationPosition> reservations) {
-  }
+      boolean ok, String reason, List<Book> loans, List<ReservationPosition> reservations) {}
 
-  public record ReservationPosition(String bookId, int position) {
-  }
+  public record ReservationPosition(String bookId, int position) {}
 }

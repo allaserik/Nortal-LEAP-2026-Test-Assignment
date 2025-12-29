@@ -134,11 +134,16 @@ class ApiRulesIntegrationTest {
     rest.postForObject(url("/api/reserve"), new ReserveRequest("b6", "m3"), ResultResponse.class);
 
     // Delete m2 (missing member)
-    rest.exchange(
-        url("/api/members"),
-        HttpMethod.DELETE,
-        new HttpEntity<>(new DeleteMemberRequest("m2")),
-        ResultResponse.class);
+    ResultResponse deleted =
+        rest.exchange(
+                url("/api/members"),
+                HttpMethod.DELETE,
+                new HttpEntity<>(new DeleteMemberRequest("m2")),
+                ResultResponse.class)
+            .getBody();
+
+    assertNotNull(deleted);
+    assertTrue(deleted.ok());
 
     // Return by borrower -> should skip m2 and hand to m3
     ResultWithNextResponse returned =

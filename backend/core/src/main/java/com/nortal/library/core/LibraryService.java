@@ -174,12 +174,14 @@ public class LibraryService {
   public List<Book> searchBooks(String titleContains, Boolean availableOnly, String loanedTo) {
     return bookRepository.findAll().stream()
         .filter(
-            b -> titleContains == null
-                || b.getTitle().toLowerCase().contains(titleContains.toLowerCase()))
+            b ->
+                titleContains == null
+                    || b.getTitle().toLowerCase().contains(titleContains.toLowerCase()))
         .filter(b -> loanedTo == null || loanedTo.equals(b.getLoanedTo()))
         .filter(
-            b -> availableOnly == null
-                || (availableOnly ? b.getLoanedTo() == null : b.getLoanedTo() != null))
+            b ->
+                availableOnly == null
+                    || (availableOnly ? b.getLoanedTo() == null : b.getLoanedTo() != null))
         .toList();
   }
 
@@ -202,9 +204,10 @@ public class LibraryService {
     if (entity.getLoanedTo() == null) {
       return Result.failure("NOT_LOANED");
     }
-    LocalDate baseDate = entity.getDueDate() == null
-        ? LocalDate.now().plusDays(DEFAULT_LOAN_DAYS)
-        : entity.getDueDate();
+    LocalDate baseDate =
+        entity.getDueDate() == null
+            ? LocalDate.now().plusDays(DEFAULT_LOAN_DAYS)
+            : entity.getDueDate();
     entity.setDueDate(baseDate.plusDays(days));
     bookRepository.save(entity);
     return Result.success();
@@ -325,9 +328,7 @@ public class LibraryService {
   }
 
   public record MemberSummary(
-      boolean ok, String reason, List<Book> loans, List<ReservationPosition> reservations) {
-  }
+      boolean ok, String reason, List<Book> loans, List<ReservationPosition> reservations) {}
 
-  public record ReservationPosition(String bookId, int position) {
-  }
+  public record ReservationPosition(String bookId, int position) {}
 }
